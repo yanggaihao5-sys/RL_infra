@@ -1,0 +1,4 @@
+# 本项目运行依赖（都很基础，平台上的 pytorch conda 环境已自带）
+numpy>=1.24
+torch>=2.0
+matplotlib>=3.6

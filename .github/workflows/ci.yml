@@ -1,0 +1,145 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
+  MPLBACKEND: Agg
+
+jobs:
+  static:
+    name: 静态检查（零第三方依赖）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 语法编译（全部源码 + 测试）
+        run: python -m compileall -q config.py main.py rlinfra algos kernel utils tests
+      - name: 库边界 8 项（rlinfra 零依赖 / 单向依赖 / 懒加载注册表）
+        run: python utils/check_boundaries.py
+
+  unit:
+    name: 单元测试（py${{ matrix.python-version }}）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: 安装依赖（CPU 版 torch）
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pytest
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: pytest（配置 / 日志契约 / 路径 / 注册表 / 环境 / 产物闸门）
+        run: python -m pytest -q tests
+
+  e2e:
+    name: 端到端（训练 → 评测 → 诊断 → 出图 → 观测契约）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 安装依赖（CPU 版 torch）
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy matplotlib
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: 骨架冒烟自检（9 项）
+        run: python utils/smoke_test.py
+      - name: 训练 + 评测
+        # episodes 必须 > COMMON_eval_interval(=25)，否则一次贪心评估都不触发：
+        # 存不出 best 模型 → 评测静默 skipped，CI 仍会"绿"（本仓库真实踩过，见报告）。
+        run: python main.py --episodes 30 --name ci_smoke --then-test
+      - name: 日志诊断
+        run: python utils/analyze_training_log.py runs/ci_smoke/train.log
+      - name: 训练曲线
+        run: python utils/plot_metrics.py runs/ci_smoke/train.log
+      - name: 转观测契约
+        run: python utils/log_to_metrics.py --log runs/ci_smoke/train.log --out runs/obs --force
+      - name: 产物闸门（6 项，数字自洽）
+        run: python utils/verify_run.py --run runs/ci_smoke --obs runs/obs/ci_smoke
+      - name: 上传产物（日志 / 评测 / 图 / 观测数据）
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ci_smoke
+          path: |
+            runs/ci_smoke/train.log
+            runs/ci_smoke/eval.json
+            runs/ci_smoke/*_best.pth
+            runs/ci_smoke/*_training_metrics_en.png
+            runs/obs/ci_smoke/
+          if-no-files-found: error
+
+  package:
+    name: 打包 + 干净环境安装（部署闸门）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 构建 wheel + sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: 检查分发内容边界（算法包在、应用层不在）
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          wheel = glob.glob("dist/*.whl")[0]
+          names = set(zipfile.ZipFile(wheel).namelist())
+          assert "rlinfra/__init__.py" in names, "wheel 缺少 rlinfra"
+          assert "algos/madqn/__init__.py" in names, "wheel 缺少 algos.madqn"
+          assert "config.py" not in names, "应用层 config.py 不应进分发"
+          assert "main.py" not in names, "应用层 main.py 不应进分发"
+          print("wheel:", wheel, "| 文件数:", len(names))
+          PY
+      - name: 干净 venv 安装 wheel（从任意目录 import）
+        run: |
+          python -m venv /tmp/clean-venv
+          /tmp/clean-venv/bin/pip install --upgrade pip
+          /tmp/clean-venv/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/clean-venv/bin/python - <<'PY'
+          import rlinfra, algos
+          from rlinfra.registry import get_algo
+          assert len(rlinfra.__all__) >= 7
+          spec = get_algo("pursuit")
+          assert spec.eval_fn == "evaluate_pursuit"
+          print("clean-install OK:", rlinfra.__file__)
+          print("algos:", algos.__file__)
+          PY
+      - name: 上传分发包
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error

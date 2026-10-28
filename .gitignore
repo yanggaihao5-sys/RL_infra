@@ -1,0 +1,60 @@
+# ── 产物与实验输出（代码与产物隔离：产物一律不进 git）──
+runs/
+longago/*
+!longago/.gitkeep
+*.pth
+*.pt
+*.npz
+*.png
+# 例外：README / 基准报告要引用的图必须进仓库（其余 *.png 仍然忽略）
+!docs/figures/*.png
+*.pdf
+output.*
+error.*
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# ── 编辑器 / 系统 ──
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# ── 重建仓库时补充：只排垃圾，不排权重 ──
+*.pyc
+*.pyo
+*.pyd
+
+# ── 大体积本地资源（2026-09-30 补）──
+# model_cache/：HF 权重（DeepSeek-R1-Distill-Qwen-1.5B 3.4GB + 7B 14.5GB），
+#   已同步到高算 /storage/public/home/__HPC_ACCOUNT__/RL_infra/model_cache/，本地不重复入库。
+# .tmp/：冒烟 / 同步 / 原子写验证的临时目录（Windows 沙箱下必须落项目内，见 utils/smoke_test.py）。
+model_cache/
+.tmp/
+
+# output/_kb/：kb 工具的**派生索引**（kb.sqlite 352KB 二进制 + 查询日志）。
+#   真相源是 md 笔记，索引可 `kb index` 重建，故不入库（2026-10-06 仓库卫生）。
+output/_kb/
+
+# _deliver/：打包回传暂存（27MB 包 + 解包树，可再生，见 scripts/pack_results.py）。
+_deliver/
+
+# ── DSH 工具/插件的运行时工作目录（不是本仓内容，2026-10-26 补）──
+# .dsh-work/：client 插件的构建/工作目录（如 chat-wallpaper）
+# .dsh-acl-reports/：沙箱 ACL 体检与备份
+# .npmtmp/：npm 安装缓存与日志
+# tmp/：插件/壁纸等工具的临时脚本与日志
+.dsh-work/
+.dsh-acl-reports/
+.npmtmp/
+tmp/

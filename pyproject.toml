@@ -1,0 +1,38 @@
+# 🕒 v2 · 2026-10-17 16:43 · dsh-agent ｜ 变更：packages 补 algos.pursuit（迁移演练新增链路） ｜ 上一版：v1 · 2026-10-17 16:16
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rlinfra"
+version = "0.1.0"
+description = "可迁移的 RL 训练基础设施：日志契约 / 产物隔离 / 链路注册表；algos/ 是示例算法包"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+authors = [{ name = "RL_infra" }]
+keywords = ["reinforcement-learning", "training-infrastructure", "reproducibility"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# 🔴 基座 rlinfra/ **零第三方依赖**（只用标准库）：日志 / 路径 / 计量 / 注册表都是纯 stdlib。
+#    重依赖只挂在具体算法包上 —— 装库不一定装得起 torch，这是刻意的边界。
+dependencies = []
+
+[project.optional-dependencies]
+# 开发 / CI：单测框架（torch 走 CPU 索引单独安装，见 .github/workflows/ci.yml）
+dev = ["pytest>=8.0"]
+# 示例链路（algos/madqn）：需要 numpy + torch + matplotlib
+madqn = ["numpy>=1.24", "torch>=2.0", "matplotlib>=3.6"]
+# 只画图 / 只跑 benchmark 报告
+plots = ["numpy>=1.24", "matplotlib>=3.6"]
+
+[tool.setuptools]
+# 只装库与算法包；config.py / main.py / utils / scripts 是**本项目应用层**，不随包分发
+packages = ["rlinfra", "algos", "algos.madqn", "algos.pursuit"]
+
+[tool.setuptools.package-data]
+rlinfra = ["py.typed"]

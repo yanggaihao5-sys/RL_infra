@@ -1,0 +1,12 @@
+{
+ "coverage": 69.46,
+ "coverage_std": 11.01,
+ "reward": 115.61,
+ "success_rate": 0.0,
+ "steps": 200.0,
+ "maps": 20,
+ "random_maps": true,
+ "evaluated_at": "2026-10-06 14:42:37",
+ "coverage_min": 34.02,
+ "coverage_max": 84.28
+}
